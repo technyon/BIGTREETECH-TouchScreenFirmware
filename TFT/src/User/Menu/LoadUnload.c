@@ -1,134 +1,118 @@
 #include "LoadUnload.h"
 #include "includes.h"
 
-#define LOAD 1
+#define NONE   0
+#define LOAD   1
 #define UNLOAD 2
-#define NO_LOAD_UNLOAD 0
 
-static u8  ext_i = 0;
-
-const char* nozzleDisplay[] = HEAT_DISPLAY_ID;
-
-uint8_t loadUnload = NO_LOAD_UNLOAD;
-
-void extruderIdReDraw(void)
-{
-  char tempstr[20];
-
-  sprintf(tempstr, "%2s: %3d/%-3d", nozzleDisplay[ext_i], heatGetCurrentTemp(ext_i), heatGetTargetTemp(ext_i));
-  setLargeFont(true);
-  GUI_DispStringInPrect(&exhibitRect, (u8 *)tempstr);
-  setLargeFont(false);
-}
-
-void coolDown(void)
-{
-  for(uint8_t i = 0; i < MAX_HEATER_COUNT; i++)
+// 1 title, ITEM_PER_PAGE items (icon + label)
+const MENUITEMS loadUnloadItems = {
+  // title
+  LABEL_LOAD_UNLOAD,
+  // icon                          label
   {
-    heatSetTargetTemp(i, 0);
+    {ICON_UNLOAD,                  LABEL_UNLOAD},
+    {ICON_BACKGROUND,              LABEL_BACKGROUND},
+    {ICON_BACKGROUND,              LABEL_BACKGROUND},
+    {ICON_LOAD,                    LABEL_LOAD},
+    {ICON_NOZZLE,                  LABEL_NOZZLE},
+    {ICON_HEAT,                    LABEL_HEAT},
+    {ICON_COOLDOWN,                LABEL_COOLDOWN},
+    {ICON_BACK,                    LABEL_BACK},
   }
+};
+
+static uint8_t tool_index = NOZZLE0;
+static uint8_t lastCmd = NONE;
+
+// set the hotend to the minimum extrusion temperature if user selected "OK"
+void loadMinTemp_OK(void)
+{
+  heatSetTargetTemp(tool_index, infoSettings.min_ext_temp);
 }
 
 void menuLoadUnload(void)
 {
   KEY_VALUES key_num = KEY_IDLE;
-  
-  MENUITEMS loadUnloadItems = {
-  // title
-  LABEL_LOAD_UNLOAD,
-  // icon                       label
-  { {ICON_UNLOAD,               LABEL_UNLOAD},
-    {ICON_BACKGROUND,           LABEL_BACKGROUND},
-    {ICON_BACKGROUND,           LABEL_BACKGROUND},
-    {ICON_LOAD,                 LABEL_LOAD},
-    {ICON_NOZZLE,               LABEL_NOZZLE},
-    {ICON_HEAT,                 LABEL_HEAT},
-    {ICON_COOLDOWN,             LABEL_COOLDOWN},
-    {ICON_BACK,                 LABEL_BACK},}
-  };
 
-  while(infoCmd.count != 0) {loopProcess();}
-
-  menuDrawPage(&loadUnloadItems);
-  extruderIdReDraw();
-
-  void showPopup (uint8_t unLoad)
+  while (infoCmd.count != 0)
   {
-    switch (unLoad)
-    {
-    case LOAD:
-      popupReminder(DIALOG_TYPE_INFO, LABEL_BUSY, LABEL_LOAD_STARTED);
-      break;
-    
-    case UNLOAD:
-      popupReminder(DIALOG_TYPE_INFO, LABEL_BUSY, LABEL_UNLOAD_STARTED);
-      break;
-
-    case NO_LOAD_UNLOAD: // in case user gets to Load/Unload menu while host is busy
-      popupReminder(DIALOG_TYPE_INFO, LABEL_SCREEN_INFO, LABEL_BUSY);
-      break;
-
-    default:
-      break;
-    }
+    loopProcess();
   }
 
-  while(infoMenu.menu[infoMenu.cur] == menuLoadUnload)
+  menuDrawPage(&loadUnloadItems);
+  temperatureReDraw(tool_index, NULL, false);
+
+  while (infoMenu.menu[infoMenu.cur] == menuLoadUnload)
   {
     key_num = menuKeyGetValue();
-    if ((infoHost.wait == true) && (key_num != KEY_IDLE))  // if user pokes around while Load/Unload in progress
+
+    if (infoHost.wait == true && key_num != KEY_IDLE &&
+        key_num != KEY_ICON_7)  // show reminder for process running if presses any button other than back button
     {
-      showPopup(loadUnload);
+      if (lastCmd == UNLOAD)
+      { // unloading
+        popupReminder(DIALOG_TYPE_INFO, LABEL_UNLOAD, LABEL_UNLOAD_STARTED);
+      }
+      else if (lastCmd == LOAD)
+      { // loading
+        popupReminder(DIALOG_TYPE_INFO, LABEL_LOAD, LABEL_LOAD_STARTED);
+      }
+      else
+      { // in case user gets to Load/Unload menu while host is busy
+        popupReminder(DIALOG_TYPE_INFO, LABEL_SCREEN_INFO, LABEL_BUSY);
+      }
     }
     else
     {
-      switch(key_num)
+      switch (key_num)
       {
-        case KEY_ICON_0:
-          mustStoreCmd("M702 T%d\n",ext_i);
-          loadUnload = UNLOAD;
-          showPopup (UNLOAD);
-          break;
-
-        case KEY_ICON_3:
-          mustStoreCmd("M701 T%d\n",ext_i);
-          loadUnload = LOAD;
-          showPopup (LOAD);
+        case KEY_ICON_0:  // Unload
+        case KEY_ICON_3:  // Load
+          if (!warmupTemperature(tool_index, loadMinTemp_OK))
+          {
+          }
+          else if (key_num == KEY_ICON_0)
+          { // unload
+            mustStoreCmd("M702 T%d\n", tool_index);
+            lastCmd = UNLOAD;
+          }
+          else
+          { // load
+            mustStoreCmd("M701 T%d\n", tool_index);
+            lastCmd = LOAD;
+          }
           break;
 
         case KEY_ICON_4:
-          ext_i = (ext_i + 1) % infoSettings.hotend_count;
-          extruderIdReDraw();
+          tool_index = (tool_index + 1) % infoSettings.hotend_count;
+
+          temperatureReDraw(tool_index, NULL, false);
+          lastCmd = NONE;
           break;
 
         case KEY_ICON_5:
           infoMenu.menu[++infoMenu.cur] = menuHeat;
+          lastCmd = NONE;
           break;
 
         case KEY_ICON_6:
-          coolDown();
+          heatCoolDown();
+          lastCmd = NONE;
           break;
 
         case KEY_ICON_7:
-          for (uint8_t i = 0; i < infoSettings.hotend_count; i++)
-          {
-            if (heatGetTargetTemp(i) > 0)
-            {
-              setDialogText(LABEL_WARNING, LABEL_HEATERS_ON, LABEL_CONFIRM, LABEL_CANCEL)
-              showDialog(DIALOG_TYPE_QUESTION, coolDown, NULL, NULL );            
-              break;
-            }
-          }
+          cooldownTemperature();
+          lastCmd = NONE;
           infoMenu.cur--;
-          loadUnload = NO_LOAD_UNLOAD;
           break;
 
         default:
-          extruderIdReDraw();
+          temperatureReDraw(tool_index, NULL, true);
           break;
-
       }
     }
+
     loopProcess();
   }
 }

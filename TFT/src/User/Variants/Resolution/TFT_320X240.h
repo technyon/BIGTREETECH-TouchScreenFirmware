@@ -37,9 +37,9 @@
 #define SSICON_WIDTH              ICON_WIDTH
 #define SSICON_HEIGHT             ICON_HEIGHT
 #define SSICON_VAL_Y0             55
-#define SSICON_VAL_COLOR          LCD_BLACK
+#define SSICON_VAL_COLOR          BLACK
 #define SSICON_NAME_Y0            5
-#define SSICON_NAME_COLOR         LCD_WHITE
+#define SSICON_NAME_COLOR         WHITE
 #define STATUS_MSG_ICON_XOFFSET   3
 #define STATUS_MSG_ICON_YOFFSET   3
 #define STATUS_MSG_TITLE_XOFFSET  3
@@ -61,7 +61,8 @@
 #define PICON_SM_WIDTH     87
 #define PICON_HEIGHT       36
 #define PICON_SPACE_X      ((LCD_WIDTH - PICON_LG_WIDTH*2 - PICON_SM_WIDTH - SPACE_X )/2)
-#define PICON_SPACE_Y      (ICON_HEIGHT + SPACE_Y - PICON_HEIGHT*2)/2
+#define PICON_SPACE_Y      (ICON_HEIGHT + SPACE_Y - PICON_HEIGHT*2)/4
+#define PICON_START_Y      (TITLE_END_Y+5)
 #define PICON_TITLE_X      37
 #define PICON_TITLE_Y      1
 #define PICON_VAL_X        PICON_TITLE_X
